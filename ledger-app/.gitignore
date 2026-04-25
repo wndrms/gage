@@ -1,0 +1,8 @@
+.env
+**/target
+**/node_modules
+**/dist
+**/*.tsbuildinfo
+frontend/vite.config.js
+frontend/vite.config.d.ts
+.DS_Store

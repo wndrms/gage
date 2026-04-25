@@ -1,0 +1,16 @@
+FROM rust:1.92-bookworm
+
+WORKDIR /app
+
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    pkg-config libssl-dev ca-certificates curl && \
+    update-ca-certificates && \
+    rm -rf /var/lib/apt/lists/*
+
+# 시스템 CA를 rustup/cargo가 인식하도록 명시
+ENV SSL_CERT_FILE=/etc/ssl/certs/ca-certificates.crt
+ENV CARGO_HTTP_CAINFO=/etc/ssl/certs/ca-certificates.crt
+
+COPY . .
+
+CMD ["cargo", "run"]
