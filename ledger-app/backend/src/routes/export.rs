@@ -60,27 +60,25 @@ pub async fn export_backup_json(
 ) -> Result<Response<Body>, AppError> {
     // 4개 쿼리를 병렬 실행
     let (transactions, accounts, categories, cards) = tokio::try_join!(
-        sqlx::query_as::<_, Transaction>(
-            "SELECT * FROM transactions WHERE user_id = $1 ORDER BY transaction_at DESC",
-        )
-        .bind(auth.id)
-        .fetch_all(&state.pool),
-        sqlx::query_as::<_, crate::models::Account>(
-            "SELECT * FROM accounts WHERE user_id = $1",
-        )
-        .bind(auth.id)
-        .fetch_all(&state.pool),
-        sqlx::query_as::<_, crate::models::Category>(
-            "SELECT * FROM categories WHERE user_id = $1",
-        )
-        .bind(auth.id)
-        .fetch_all(&state.pool),
-        sqlx::query_as::<_, crate::models::Card>(
-            "SELECT * FROM cards WHERE user_id = $1",
-        )
-        .bind(auth.id)
-        .fetch_all(&state.pool),
-    )?;
+            sqlx::query_as::<_, Transaction>(
+                "SELECT * FROM transactions WHERE user_id = $1 ORDER BY transaction_at DESC",
+            )
+            .bind(auth.id)
+            .fetch_all(&state.pool),
+            sqlx::query_as::<_, crate::models::Account>(
+                "SELECT * FROM accounts WHERE user_id = $1",
+            )
+            .bind(auth.id)
+            .fetch_all(&state.pool),
+            sqlx::query_as::<_, crate::models::Category>(
+                "SELECT * FROM categories WHERE user_id = $1",
+            )
+            .bind(auth.id)
+            .fetch_all(&state.pool),
+            sqlx::query_as::<_, crate::models::Card>("SELECT * FROM cards WHERE user_id = $1",)
+                .bind(auth.id)
+                .fetch_all(&state.pool),
+        )?;
 
     let backup = serde_json::json!({
         "exported_at": Utc::now(),

@@ -7,7 +7,10 @@ use serde::{Deserialize, Serialize};
 use sqlx::FromRow;
 use uuid::Uuid;
 
-use crate::{AppState, auth::extractor::AuthUser, errors::AppError, services::auto_categorize::normalize_merchant};
+use crate::{
+    AppState, auth::extractor::AuthUser, errors::AppError,
+    services::auto_categorize::normalize_merchant,
+};
 
 #[derive(Debug, Clone, Serialize, Deserialize, FromRow)]
 pub struct CategoryRule {
@@ -53,13 +56,12 @@ pub async fn create_rule(
     }
     let normalized = normalize_merchant(&keyword);
 
-    let owned: Option<(Uuid,)> = sqlx::query_as(
-        "SELECT id FROM categories WHERE id = $1 AND user_id = $2",
-    )
-    .bind(payload.category_id)
-    .bind(auth.id)
-    .fetch_optional(&state.pool)
-    .await?;
+    let owned: Option<(Uuid,)> =
+        sqlx::query_as("SELECT id FROM categories WHERE id = $1 AND user_id = $2")
+            .bind(payload.category_id)
+            .bind(auth.id)
+            .fetch_optional(&state.pool)
+            .await?;
 
     if owned.is_none() {
         return Err(AppError::BadRequest("유효하지 않은 카테고리입니다".into()));
@@ -96,13 +98,11 @@ pub async fn delete_rule(
     State(state): State<AppState>,
     auth: AuthUser,
 ) -> Result<Json<serde_json::Value>, AppError> {
-    let result = sqlx::query(
-        "DELETE FROM merchant_category_rules WHERE id = $1 AND user_id = $2",
-    )
-    .bind(id)
-    .bind(auth.id)
-    .execute(&state.pool)
-    .await?;
+    let result = sqlx::query("DELETE FROM merchant_category_rules WHERE id = $1 AND user_id = $2")
+        .bind(id)
+        .bind(auth.id)
+        .execute(&state.pool)
+        .await?;
 
     if result.rows_affected() == 0 {
         return Err(AppError::NotFound);

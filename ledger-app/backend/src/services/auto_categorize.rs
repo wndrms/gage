@@ -43,12 +43,7 @@ pub async fn auto_categorize(
 
 /// 사용자가 가맹점에 카테고리를 직접 지정했을 때 규칙을 학습합니다.
 /// 기존 규칙이 있으면 category_id를 갱신하고 source를 'learned'로 승격합니다.
-pub async fn learn_rule(
-    pool: &PgPool,
-    user_id: Uuid,
-    merchant_name: &str,
-    category_id: Uuid,
-) {
+pub async fn learn_rule(pool: &PgPool, user_id: Uuid, merchant_name: &str, category_id: Uuid) {
     let keyword = merchant_name.trim();
     if keyword.is_empty() {
         return;

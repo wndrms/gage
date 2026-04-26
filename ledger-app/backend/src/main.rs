@@ -53,7 +53,13 @@ async fn main() -> Result<()> {
 
     let cors = CorsLayer::new()
         .allow_origin(config.frontend_origin.parse::<axum::http::HeaderValue>()?)
-        .allow_methods([Method::GET, Method::POST, Method::PUT, Method::DELETE, Method::OPTIONS])
+        .allow_methods([
+            Method::GET,
+            Method::POST,
+            Method::PUT,
+            Method::DELETE,
+            Method::OPTIONS,
+        ])
         .allow_headers([ACCEPT, AUTHORIZATION, CONTENT_TYPE, ORIGIN])
         .allow_credentials(true);
 

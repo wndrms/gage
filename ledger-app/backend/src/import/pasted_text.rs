@@ -33,7 +33,10 @@ impl TransactionParser for PastedCsvTextParser {
         let (headers, rows) = csv_records(content)?;
         let map = header_map(&headers);
 
-        let date_idx = ensure_column(pick_col(&map, &["날짜", "일자", "거래일자"]), "날짜/일자 열이 필요합니다")?;
+        let date_idx = ensure_column(
+            pick_col(&map, &["날짜", "일자", "거래일자"]),
+            "날짜/일자 열이 필요합니다",
+        )?;
         let time_idx = pick_col(&map, &["시간", "거래시간"]);
         let merchant_idx = pick_col(&map, &["가맹점", "가맹점명", "내용", "상호"]);
         let desc_idx = pick_col(&map, &["내용", "적요", "메모"]);

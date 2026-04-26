@@ -1,4 +1,7 @@
-use axum::{Json, extract::{Multipart, Path, State}};
+use axum::{
+    Json,
+    extract::{Multipart, Path, State},
+};
 use serde::{Deserialize, Serialize};
 use uuid::Uuid;
 
@@ -73,7 +76,8 @@ pub async fn upload_file_import(
         }
     }
 
-    let file_bytes = file_bytes.ok_or_else(|| AppError::BadRequest("파일을 선택해 주세요".to_string()))?;
+    let file_bytes =
+        file_bytes.ok_or_else(|| AppError::BadRequest("파일을 선택해 주세요".to_string()))?;
     let ext = filename
         .as_ref()
         .and_then(|name| name.rsplit('.').next())
@@ -118,7 +122,9 @@ pub async fn upload_pasted_text_import(
     Json(payload): Json<PastedTextImportRequest>,
 ) -> Result<Json<ImportPreviewResponse>, AppError> {
     if payload.text.trim().is_empty() {
-        return Err(AppError::BadRequest("붙여넣을 텍스트를 입력해 주세요".to_string()));
+        return Err(AppError::BadRequest(
+            "붙여넣을 텍스트를 입력해 주세요".to_string(),
+        ));
     }
 
     let institution = payload
@@ -216,5 +222,7 @@ pub async fn cancel_import(
         .await
         .map_err(|err| AppError::BadRequest(err.to_string()))?;
 
-    Ok(Json(serde_json::json!({"message": "가져오기를 취소했습니다"})))
+    Ok(Json(
+        serde_json::json!({"message": "가져오기를 취소했습니다"}),
+    ))
 }

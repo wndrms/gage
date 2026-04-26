@@ -57,15 +57,23 @@ pub fn extract_message_text(payload: &TelegramWebhookPayload) -> Option<String> 
 }
 
 pub fn extract_chat_id(payload: &TelegramWebhookPayload) -> Option<String> {
-    payload
-        .telegram_chat_id
-        .clone()
-        .or_else(|| payload.message.as_ref()?.chat.as_ref().map(|c| c.id.to_string()))
+    payload.telegram_chat_id.clone().or_else(|| {
+        payload
+            .message
+            .as_ref()?
+            .chat
+            .as_ref()
+            .map(|c| c.id.to_string())
+    })
 }
 
 pub fn extract_user_id(payload: &TelegramWebhookPayload) -> Option<String> {
-    payload
-        .telegram_user_id
-        .clone()
-        .or_else(|| payload.message.as_ref()?.from.as_ref().map(|u| u.id.to_string()))
+    payload.telegram_user_id.clone().or_else(|| {
+        payload
+            .message
+            .as_ref()?
+            .from
+            .as_ref()
+            .map(|u| u.id.to_string())
+    })
 }

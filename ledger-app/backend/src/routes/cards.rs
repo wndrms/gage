@@ -73,10 +73,12 @@ pub async fn list_cards(
     State(state): State<AppState>,
     auth: AuthUser,
 ) -> Result<Json<Vec<Card>>, AppError> {
-    let rows = sqlx::query_as::<_, Card>("SELECT * FROM cards WHERE user_id = $1 ORDER BY created_at DESC")
-        .bind(auth.id)
-        .fetch_all(&state.pool)
-        .await?;
+    let rows = sqlx::query_as::<_, Card>(
+        "SELECT * FROM cards WHERE user_id = $1 ORDER BY created_at DESC",
+    )
+    .bind(auth.id)
+    .fetch_all(&state.pool)
+    .await?;
 
     Ok(Json(rows))
 }
@@ -178,7 +180,9 @@ pub async fn get_card_summary(
 ) -> Result<Json<CardSummaryResponse>, AppError> {
     let month_date = NaiveDate::parse_from_str(&format!("{}-01", query.month), "%Y-%m-%d")
         .map_err(|_| {
-            AppError::BadRequest("월 형식이 올바르지 않습니다. YYYY-MM 형식으로 입력해 주세요".to_string())
+            AppError::BadRequest(
+                "월 형식이 올바르지 않습니다. YYYY-MM 형식으로 입력해 주세요".to_string(),
+            )
         })?;
     let month_start = month_date.and_hms_opt(0, 0, 0).unwrap().and_utc();
     let next_month = if month_date.month() == 12 {
@@ -197,6 +201,7 @@ pub async fn get_card_summary(
         SELECT SUM(amount)::bigint
         FROM transactions
         WHERE user_id = $1
+          AND scope = 'personal'
           AND card_id = $2
           AND transaction_at >= $3
           AND transaction_at < $4
@@ -218,6 +223,7 @@ pub async fn get_card_summary(
         FROM transactions t
         LEFT JOIN categories c ON t.category_id = c.id
         WHERE t.user_id = $1
+          AND t.scope = 'personal'
           AND t.card_id = $2
           AND t.transaction_at >= $3
           AND t.transaction_at < $4
@@ -271,7 +277,9 @@ pub async fn get_card_transactions(
 ) -> Result<Json<CardTransactionResponse>, AppError> {
     let month_date = NaiveDate::parse_from_str(&format!("{}-01", query.month), "%Y-%m-%d")
         .map_err(|_| {
-            AppError::BadRequest("월 형식이 올바르지 않습니다. YYYY-MM 형식으로 입력해 주세요".to_string())
+            AppError::BadRequest(
+                "월 형식이 올바르지 않습니다. YYYY-MM 형식으로 입력해 주세요".to_string(),
+            )
         })?;
 
     let month_start = month_date.and_hms_opt(0, 0, 0).unwrap().and_utc();
@@ -286,7 +294,19 @@ pub async fn get_card_transactions(
 
     ensure_card_exists(&state, auth.id, id).await?;
 
-    let rows = sqlx::query_as::<_, (Uuid, chrono::DateTime<chrono::Utc>, i64, Option<String>, Option<String>, Option<String>, Option<String>, Option<String>)>(
+    let rows = sqlx::query_as::<
+        _,
+        (
+            Uuid,
+            chrono::DateTime<chrono::Utc>,
+            i64,
+            Option<String>,
+            Option<String>,
+            Option<String>,
+            Option<String>,
+            Option<String>,
+        ),
+    >(
         r#"
         SELECT
             t.id,
@@ -301,6 +321,7 @@ pub async fn get_card_transactions(
         LEFT JOIN categories c ON t.category_id = c.id
         LEFT JOIN accounts a ON t.account_id = a.id
         WHERE t.user_id = $1
+          AND t.scope = 'personal'
           AND t.card_id = $2
           AND t.transaction_at >= $3
           AND t.transaction_at < $4
@@ -316,12 +337,24 @@ pub async fn get_card_transactions(
     .await?;
 
     let total_count = rows.len() as i32;
-    let total_amount = rows.iter().map(|(_, _, amount, _, _, _, _, _)| *amount).sum::<i64>();
+    let total_amount = rows
+        .iter()
+        .map(|(_, _, amount, _, _, _, _, _)| *amount)
+        .sum::<i64>();
 
     let transactions = rows
         .into_iter()
         .map(
-            |(id, transaction_at, amount, merchant_name, description, category_name, account_name, memo)| {
+            |(
+                id,
+                transaction_at,
+                amount,
+                merchant_name,
+                description,
+                category_name,
+                account_name,
+                memo,
+            )| {
                 CardTransactionItem {
                     id,
                     transaction_at,
@@ -345,12 +378,17 @@ pub async fn get_card_transactions(
     }))
 }
 
-async fn ensure_card_exists(state: &AppState, user_id: Uuid, card_id: Uuid) -> Result<(), AppError> {
-    let exists = sqlx::query_scalar::<_, i64>("SELECT COUNT(1) FROM cards WHERE id = $1 AND user_id = $2")
-        .bind(card_id)
-        .bind(user_id)
-        .fetch_one(&state.pool)
-        .await?;
+async fn ensure_card_exists(
+    state: &AppState,
+    user_id: Uuid,
+    card_id: Uuid,
+) -> Result<(), AppError> {
+    let exists =
+        sqlx::query_scalar::<_, i64>("SELECT COUNT(1) FROM cards WHERE id = $1 AND user_id = $2")
+            .bind(card_id)
+            .bind(user_id)
+            .fetch_one(&state.pool)
+            .await?;
 
     if exists == 0 {
         return Err(AppError::NotFound);

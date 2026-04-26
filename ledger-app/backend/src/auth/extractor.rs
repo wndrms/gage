@@ -13,7 +13,18 @@ use crate::{AppState, errors::AppError};
 pub struct AuthUser {
     pub id: Uuid,
     pub display_name: String,
+    pub role: String,
     pub session_token: String,
+}
+
+impl AuthUser {
+    pub fn require_admin(&self) -> Result<(), AppError> {
+        if self.role == "admin" {
+            Ok(())
+        } else {
+            Err(AppError::Forbidden)
+        }
+    }
 }
 
 impl<S> FromRequestParts<S> for AuthUser
@@ -56,6 +67,7 @@ where
             Ok(AuthUser {
                 id: user.id,
                 display_name: user.display_name,
+                role: user.role,
                 session_token: token,
             })
         }

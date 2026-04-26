@@ -9,6 +9,7 @@ pub struct User {
     pub email: Option<String>,
     pub display_name: String,
     pub password_hash: Option<String>,
+    pub role: String,
     pub created_at: DateTime<Utc>,
     pub updated_at: DateTime<Utc>,
 }
@@ -86,6 +87,43 @@ pub struct Transaction {
     pub raw_data: serde_json::Value,
     pub dedupe_key: String,
     pub memo: Option<String>,
+    pub scope: String,
+    pub kream_kind: Option<String>,
+    pub created_at: DateTime<Utc>,
+    pub updated_at: DateTime<Utc>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, FromRow)]
+pub struct KreamSale {
+    pub id: Uuid,
+    pub user_id: Uuid,
+    pub sale_code: String,
+    pub product_name: String,
+    pub purchase_date: NaiveDate,
+    pub settlement_date: Option<NaiveDate>,
+    pub purchase_price: i64,
+    pub settlement_price: i64,
+    pub side_cost: i64,
+    pub purchase_transaction_id: Option<Uuid>,
+    pub settlement_transaction_id: Option<Uuid>,
+    pub side_cost_transaction_id: Option<Uuid>,
+    pub dedupe_key: String,
+    pub source_filename: Option<String>,
+    pub source_row_index: Option<i32>,
+    pub raw_data: serde_json::Value,
+    pub memo: Option<String>,
+    pub created_at: DateTime<Utc>,
+    pub updated_at: DateTime<Utc>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, FromRow)]
+pub struct KreamKeywordRule {
+    pub id: Uuid,
+    pub user_id: Uuid,
+    pub keyword: String,
+    pub keyword_normalized: String,
+    pub kream_kind: String,
+    pub is_active: bool,
     pub created_at: DateTime<Utc>,
     pub updated_at: DateTime<Utc>,
 }

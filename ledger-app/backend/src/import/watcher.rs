@@ -50,7 +50,9 @@ async fn run_watcher(state: AppState, dir: std::path::PathBuf) -> Result<()> {
 
                     match import::first_user_id(&state.pool).await {
                         Ok(Some(user_id)) => {
-                            if let Err(err) = import::process_file_from_path(&state.pool, user_id, &path).await {
+                            if let Err(err) =
+                                import::process_file_from_path(&state.pool, user_id, &path).await
+                            {
                                 tracing::warn!(
                                     file = %path.display(),
                                     error = %err,

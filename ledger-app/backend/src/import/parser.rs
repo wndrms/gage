@@ -111,8 +111,8 @@ pub fn csv_records(content: &[u8]) -> Result<(Vec<String>, Vec<Vec<String>>)> {
 
 pub fn sheet_rows(content: &[u8]) -> Result<Vec<Vec<String>>> {
     let cursor = Cursor::new(content.to_vec());
-    let mut workbook = calamine::open_workbook_auto_from_rs(cursor)
-        .context("엑셀 파일을 열 수 없습니다")?;
+    let mut workbook =
+        calamine::open_workbook_auto_from_rs(cursor).context("엑셀 파일을 열 수 없습니다")?;
     let first_sheet = workbook
         .sheet_names()
         .first()
@@ -133,8 +133,8 @@ pub fn sheet_rows(content: &[u8]) -> Result<Vec<Vec<String>>> {
 /// 특정 시트명을 포함하는 시트를 찾아 행 목록 반환 (대소문자 무시, 부분 일치)
 pub fn sheet_rows_named(content: &[u8], name_hint: &str) -> Result<Vec<Vec<String>>> {
     let cursor = Cursor::new(content.to_vec());
-    let mut workbook = calamine::open_workbook_auto_from_rs(cursor)
-        .context("엑셀 파일을 열 수 없습니다")?;
+    let mut workbook =
+        calamine::open_workbook_auto_from_rs(cursor).context("엑셀 파일을 열 수 없습니다")?;
 
     let sheet_name = workbook
         .sheet_names()
@@ -169,7 +169,9 @@ pub fn html_table_rows(content: &[u8]) -> Result<Vec<Vec<String>>> {
 
     while let Some(tr_start) = lower[pos..].find("<tr") {
         let abs_tr = pos + tr_start;
-        let Some(tr_end) = lower[abs_tr..].find("</tr>") else { break };
+        let Some(tr_end) = lower[abs_tr..].find("</tr>") else {
+            break;
+        };
         let tr_content = &text[abs_tr..abs_tr + tr_end + 5];
         let tr_lower = tr_content.to_lowercase();
 
@@ -184,13 +186,21 @@ pub fn html_table_rows(content: &[u8]) -> Result<Vec<Vec<String>>> {
                 (None, None) => break,
                 (Some(a), None) => a,
                 (None, Some(b)) => b,
-                (Some(a), Some(b)) => if a.0 <= b.0 { a } else { b },
+                (Some(a), Some(b)) => {
+                    if a.0 <= b.0 {
+                        a
+                    } else {
+                        b
+                    }
+                }
             };
             let abs_cell = cell_pos + rel_start;
             let close_open = tr_lower[abs_cell..].find('>').unwrap_or(0);
             let content_start = abs_cell + close_open + 1;
             let close_tag = format!("</{}>", tag);
-            let Some(cell_end) = tr_lower[content_start..].find(close_tag.as_str()) else { break };
+            let Some(cell_end) = tr_lower[content_start..].find(close_tag.as_str()) else {
+                break;
+            };
             let raw = &tr_content[content_start..content_start + cell_end];
             cells.push(strip_html_tags(raw));
             cell_pos = content_start + cell_end + close_tag.len();
@@ -281,7 +291,8 @@ pub fn ensure_column(idx: Option<usize>, message: &str) -> Result<usize> {
 }
 
 pub fn row_value<'a>(row: &'a [String], idx: Option<usize>) -> &'a str {
-    idx.and_then(|i| row.get(i).map(|s| s.as_str())).unwrap_or("")
+    idx.and_then(|i| row.get(i).map(|s| s.as_str()))
+        .unwrap_or("")
 }
 
 pub fn parse_default_type(outflow: Option<i64>, inflow: Option<i64>) -> Option<(String, i64)> {

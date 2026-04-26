@@ -1,8 +1,8 @@
 use anyhow::{Result, bail};
 
 use super::parser::{
-    DetectInput, NormalizedTransaction, TransactionParser, header_map,
-    parse_amount, parse_local_datetime, sheet_rows_named, pick_col, row_value,
+    DetectInput, NormalizedTransaction, TransactionParser, header_map, parse_amount,
+    parse_local_datetime, pick_col, row_value, sheet_rows_named,
 };
 
 #[derive(Debug, Default)]
@@ -29,7 +29,13 @@ impl TransactionParser for SamsungCardParser {
             .sample_text
             .map(|v| v.to_string())
             .unwrap_or_else(|| String::from_utf8_lossy(input.content).to_string());
-        for marker in ["승인일자", "승인시각", "승인금액(원)", "취소여부", "국내이용내역"] {
+        for marker in [
+            "승인일자",
+            "승인시각",
+            "승인금액(원)",
+            "취소여부",
+            "국내이용내역",
+        ] {
             if sample.contains(marker) {
                 score += 0.1;
             }
@@ -44,13 +50,11 @@ impl TransactionParser for SamsungCardParser {
             bail!("삼성카드 파일에서 데이터를 읽을 수 없습니다");
         }
 
-        let header_idx = rows
-            .iter()
-            .position(|row| {
-                row.iter().any(|cell| {
-                    cell.contains("승인일자") || cell.contains("가맹점명") || cell.contains("승인금액")
-                })
-            });
+        let header_idx = rows.iter().position(|row| {
+            row.iter().any(|cell| {
+                cell.contains("승인일자") || cell.contains("가맹점명") || cell.contains("승인금액")
+            })
+        });
 
         let header_idx = match header_idx {
             Some(idx) => idx,
@@ -91,7 +95,11 @@ impl TransactionParser for SamsungCardParser {
             let time_raw = row_value(&row, time_idx).trim().to_string();
             let transaction_at = match parse_local_datetime(
                 &date_raw,
-                if time_raw.is_empty() { None } else { Some(&time_raw) },
+                if time_raw.is_empty() {
+                    None
+                } else {
+                    Some(&time_raw)
+                },
             ) {
                 Some(v) => v,
                 None => continue,
@@ -124,13 +132,29 @@ impl TransactionParser for SamsungCardParser {
                 posted_at: None,
                 r#type: "expense".to_string(),
                 amount,
-                merchant_name: if merchant_name.is_empty() { None } else { Some(merchant_name) },
-                description: if installment.is_empty() { None } else { Some(installment) },
+                merchant_name: if merchant_name.is_empty() {
+                    None
+                } else {
+                    Some(merchant_name)
+                },
+                description: if installment.is_empty() {
+                    None
+                } else {
+                    Some(installment)
+                },
                 account_name: None,
-                card_name: if card_no.is_empty() { None } else { Some(card_no) },
+                card_name: if card_no.is_empty() {
+                    None
+                } else {
+                    Some(card_no)
+                },
                 source_institution: Some("samsung_card".to_string()),
                 balance_after: None,
-                approval_number: if approval_number.is_empty() { None } else { Some(approval_number) },
+                approval_number: if approval_number.is_empty() {
+                    None
+                } else {
+                    Some(approval_number)
+                },
                 raw_data: serde_json::json!({}),
                 dedupe_key: None,
             });

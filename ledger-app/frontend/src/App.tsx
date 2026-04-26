@@ -11,6 +11,7 @@ import CardsPage from '@/pages/CardsPage';
 import CardDetailPage from '@/pages/CardDetailPage';
 import CardPresetsPage from '@/pages/CardPresetsPage';
 import ImportsPage from '@/pages/ImportsPage';
+import KreamSalesPage from '@/pages/KreamSalesPage';
 import AssetsPage from '@/pages/AssetsPage';
 import SettingsPage from '@/pages/SettingsPage';
 import AccountsPage from '@/pages/AccountsPage';
@@ -37,6 +38,7 @@ export default function App() {
           <Route path="cards/presets" element={<CardPresetsPage />} />
           <Route path="cards/:id" element={<CardDetailPage />} />
           <Route path="imports" element={<ImportsPage />} />
+          <Route path="kream-sales" element={<KreamSalesPage />} />
           <Route path="assets" element={<AssetsPage />} />
           <Route path="settings" element={<SettingsPage />} />
           <Route path="accounts" element={<AccountsPage />} />

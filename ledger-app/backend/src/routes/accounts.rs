@@ -1,4 +1,7 @@
-use axum::{Json, extract::{Path, State}};
+use axum::{
+    Json,
+    extract::{Path, State},
+};
 use serde::Deserialize;
 use uuid::Uuid;
 
@@ -42,7 +45,9 @@ pub async fn create_account(
     Json(payload): Json<CreateAccountRequest>,
 ) -> Result<Json<Account>, AppError> {
     if payload.name.trim().is_empty() {
-        return Err(AppError::BadRequest("계좌 이름을 입력해 주세요".to_string()));
+        return Err(AppError::BadRequest(
+            "계좌 이름을 입력해 주세요".to_string(),
+        ));
     }
 
     let row = sqlx::query_as::<_, Account>(

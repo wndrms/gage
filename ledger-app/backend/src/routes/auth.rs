@@ -1,15 +1,14 @@
-use argon2::{Argon2, PasswordHash, PasswordHasher, PasswordVerifier, password_hash::{SaltString, rand_core::OsRng}};
+use argon2::{
+    Argon2, PasswordHash, PasswordHasher, PasswordVerifier,
+    password_hash::{SaltString, rand_core::OsRng},
+};
 use axum::{Json, extract::State};
 use axum_extra::extract::cookie::{Cookie, CookieJar, SameSite};
 use chrono::Utc;
 use serde::{Deserialize, Serialize};
 use time::Duration;
 
-use crate::{
-    AppState,
-    auth::extractor::AuthUser,
-    errors::AppError,
-};
+use crate::{AppState, auth::extractor::AuthUser, errors::AppError};
 
 const SESSION_DAYS: i64 = 30;
 
@@ -23,6 +22,7 @@ pub struct LoginRequest {
 pub struct AuthMeResponse {
     pub id: uuid::Uuid,
     pub display_name: String,
+    pub role: String,
 }
 
 pub async fn login(
@@ -61,14 +61,12 @@ pub async fn login(
     let token = uuid::Uuid::new_v4().to_string();
     let expires_at = Utc::now() + chrono::Duration::days(SESSION_DAYS);
 
-    sqlx::query(
-        "INSERT INTO sessions (token, user_id, expires_at) VALUES ($1, $2, $3)",
-    )
-    .bind(&token)
-    .bind(user.id)
-    .bind(expires_at)
-    .execute(&state.pool)
-    .await?;
+    sqlx::query("INSERT INTO sessions (token, user_id, expires_at) VALUES ($1, $2, $3)")
+        .bind(&token)
+        .bind(user.id)
+        .bind(expires_at)
+        .execute(&state.pool)
+        .await?;
 
     let cookie = Cookie::build((state.config.session_cookie_name.clone(), token))
         .path("/")
@@ -85,6 +83,7 @@ pub async fn login(
         Json(AuthMeResponse {
             id: user.id,
             display_name: user.display_name,
+            role: user.role,
         }),
     ))
 }
@@ -108,13 +107,17 @@ pub async fn logout(
             .path("/")
             .build(),
     );
-    Ok((jar, Json(serde_json::json!({"message": "로그아웃되었습니다"}))))
+    Ok((
+        jar,
+        Json(serde_json::json!({"message": "로그아웃되었습니다"})),
+    ))
 }
 
 pub async fn me(auth: AuthUser) -> Result<Json<AuthMeResponse>, AppError> {
     Ok(Json(AuthMeResponse {
         id: auth.id,
         display_name: auth.display_name,
+        role: auth.role,
     }))
 }
 
@@ -131,19 +134,21 @@ pub async fn change_password(
 ) -> Result<Json<serde_json::Value>, AppError> {
     let new_pw = payload.new_password.trim();
     if new_pw.len() < 8 {
-        return Err(AppError::BadRequest("새 비밀번호는 8자 이상이어야 합니다".to_string()));
+        return Err(AppError::BadRequest(
+            "새 비밀번호는 8자 이상이어야 합니다".to_string(),
+        ));
     }
     if new_pw == payload.current_password.trim() {
-        return Err(AppError::BadRequest("새 비밀번호가 현재 비밀번호와 동일합니다".to_string()));
+        return Err(AppError::BadRequest(
+            "새 비밀번호가 현재 비밀번호와 동일합니다".to_string(),
+        ));
     }
 
-    let user = sqlx::query_as::<_, crate::models::User>(
-        "SELECT * FROM users WHERE id = $1",
-    )
-    .bind(auth.id)
-    .fetch_optional(&state.pool)
-    .await?
-    .ok_or(AppError::Unauthorized)?;
+    let user = sqlx::query_as::<_, crate::models::User>("SELECT * FROM users WHERE id = $1")
+        .bind(auth.id)
+        .fetch_optional(&state.pool)
+        .await?
+        .ok_or(AppError::Unauthorized)?;
 
     let hash = user.password_hash.ok_or(AppError::Unauthorized)?;
     let parsed_hash = PasswordHash::new(&hash)
@@ -176,5 +181,7 @@ pub async fn change_password(
 
     tx.commit().await?;
 
-    Ok(Json(serde_json::json!({"message": "비밀번호가 변경되었습니다"})))
+    Ok(Json(
+        serde_json::json!({"message": "비밀번호가 변경되었습니다"}),
+    ))
 }

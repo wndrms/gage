@@ -11,6 +11,12 @@ import type {
   DashboardMonthly,
   ImportPreview,
   ImportRecord,
+  KreamKeywordRule,
+  KreamKeywordRuleResponse,
+  KreamLedgerTransaction,
+  KreamSalesResponse,
+  KreamTransactionCandidate,
+  KreamUploadResponse,
   NetWorthPoint,
   Transaction
 } from '@/types';
@@ -70,5 +76,84 @@ export const resourceApi = {
       body: JSON.stringify(payload)
     }),
   deleteCategoryRule: (id: string) =>
-    api<{ message: string }>(`/api/category-rules/${id}`, { method: 'DELETE' })
+    api<{ message: string }>(`/api/category-rules/${id}`, { method: 'DELETE' }),
+  kreamSales: () => api<KreamSalesResponse>('/api/admin/kream-sales'),
+  createKreamSale: (payload: {
+    product_name: string;
+    purchase_date: string;
+    settlement_date?: string | null;
+    purchase_price: number;
+    settlement_price?: number | null;
+    memo?: string | null;
+  }) =>
+    api<KreamSalesResponse['sales'][number]>('/api/admin/kream-sales', {
+      method: 'POST',
+      body: JSON.stringify(payload)
+    }),
+  kreamLedger: () => api<KreamLedgerTransaction[]>('/api/admin/kream-sales/ledger'),
+  kreamCandidates: (kind: 'purchase' | 'settlement' | 'side_cost' = 'purchase', keyword?: string) => {
+    const params = new URLSearchParams({ kind });
+    if (keyword?.trim()) params.set('keyword', keyword.trim());
+    return api<KreamTransactionCandidate[]>(`/api/admin/kream-sales/candidates?${params.toString()}`);
+  },
+  matchKreamTransaction: (
+    saleId: string,
+    payload: { transaction_id: string; kind: 'purchase' | 'settlement' }
+  ) =>
+    api<KreamSalesResponse['sales'][number]>(`/api/admin/kream-sales/${saleId}/match`, {
+      method: 'POST',
+      body: JSON.stringify(payload)
+    }),
+  unmatchKreamTransaction: (
+    saleId: string,
+    payload: { kind: 'purchase' | 'settlement' }
+  ) =>
+    api<KreamSalesResponse['sales'][number]>(`/api/admin/kream-sales/${saleId}/unmatch`, {
+      method: 'POST',
+      body: JSON.stringify(payload)
+    }),
+  markKreamTransaction: (payload: {
+    transaction_id: string;
+    scope: 'personal' | 'kream';
+    kream_kind?: 'purchase' | 'settlement' | 'side_cost' | null;
+  }) =>
+    api<KreamTransactionCandidate>('/api/admin/kream-transactions/mark', {
+      method: 'POST',
+      body: JSON.stringify(payload)
+    }),
+  bulkMarkKreamTransactions: (payload: {
+    transaction_ids: string[];
+    kream_kind: 'side_cost';
+  }) =>
+    api<{ updated_count: number }>('/api/admin/kream-transactions/bulk-mark', {
+      method: 'POST',
+      body: JSON.stringify(payload)
+    }),
+  kreamKeywordRules: () => api<KreamKeywordRule[]>('/api/admin/kream-keyword-rules'),
+  createKreamKeywordRule: (payload: { keyword: string; kream_kind?: 'side_cost' }) =>
+    api<KreamKeywordRuleResponse>('/api/admin/kream-keyword-rules', {
+      method: 'POST',
+      body: JSON.stringify(payload)
+    }),
+  deleteKreamKeywordRule: (id: string) =>
+    api<{ message: string }>(`/api/admin/kream-keyword-rules/${id}`, {
+      method: 'DELETE'
+    }),
+  uploadKreamSales: async (file: File) => {
+    const form = new FormData();
+    form.append('file', file);
+
+    const response = await fetch('/api/admin/kream-sales/upload', {
+      method: 'POST',
+      body: form,
+      credentials: 'include'
+    });
+
+    const body = await response.json();
+    if (!response.ok) {
+      throw new Error(body?.message || 'KREAM file upload failed.');
+    }
+
+    return body as KreamUploadResponse;
+  }
 };

@@ -76,7 +76,9 @@ pub async fn monthly_dashboard(
 ) -> Result<Json<MonthlyDashboardResponse>, AppError> {
     let month_start_date = NaiveDate::parse_from_str(&format!("{}-01", query.month), "%Y-%m-%d")
         .map_err(|_| {
-            AppError::BadRequest("월 형식이 올바르지 않습니다. YYYY-MM 형식으로 입력해 주세요".to_string())
+            AppError::BadRequest(
+                "월 형식이 올바르지 않습니다. YYYY-MM 형식으로 입력해 주세요".to_string(),
+            )
         })?;
     let month_start = month_start_date.and_hms_opt(0, 0, 0).unwrap().and_utc();
     let next_month_date = shift_month(month_start_date, 1);
@@ -96,6 +98,7 @@ pub async fn monthly_dashboard(
                 (SUM(amount) FILTER (WHERE type = 'expense' AND transaction_at >= $4 AND transaction_at < $2))::bigint
             FROM transactions
             WHERE user_id = $1
+              AND scope = 'personal'
             "#,
         )
         .bind(auth.id)
@@ -111,6 +114,7 @@ pub async fn monthly_dashboard(
         SELECT *
         FROM transactions
         WHERE user_id = $1
+          AND scope = 'personal'
           AND transaction_at >= $2
           AND transaction_at < $3
         ORDER BY transaction_at DESC
@@ -129,6 +133,7 @@ pub async fn monthly_dashboard(
         FROM transactions t
         LEFT JOIN categories c ON t.category_id = c.id
         WHERE t.user_id = $1
+          AND t.scope = 'personal'
           AND t.transaction_at >= $2
           AND t.transaction_at < $3
           AND t.type = 'expense'
@@ -157,6 +162,7 @@ pub async fn monthly_dashboard(
         FROM transactions t
         LEFT JOIN cards cd ON t.card_id = cd.id
         WHERE t.user_id = $1
+          AND t.scope = 'personal'
           AND t.transaction_at >= $2
           AND t.transaction_at < $3
           AND t.type = 'expense'
@@ -174,7 +180,10 @@ pub async fn monthly_dashboard(
     .into_iter()
     .map(|(issuer, card_name, amount)| {
         let name = format_card_display_name(issuer.as_deref(), card_name.as_deref());
-        BreakdownItem { name, amount: amount.unwrap_or(0) }
+        BreakdownItem {
+            name,
+            amount: amount.unwrap_or(0),
+        }
     })
     .collect::<Vec<_>>();
 
@@ -184,6 +193,7 @@ pub async fn monthly_dashboard(
         FROM transactions t
         LEFT JOIN accounts a ON t.account_id = a.id
         WHERE t.user_id = $1
+          AND t.scope = 'personal'
           AND t.transaction_at >= $2
           AND t.transaction_at < $3
           AND t.type = 'expense'
@@ -254,7 +264,7 @@ pub async fn daily_dashboard(
     let end = kst_day_end_utc(date)?;
 
     let total_income = sqlx::query_scalar::<_, Option<i64>>(
-        "SELECT SUM(amount)::bigint FROM transactions WHERE user_id = $1 AND transaction_at >= $2 AND transaction_at <= $3 AND type = 'income'",
+        "SELECT SUM(amount)::bigint FROM transactions WHERE user_id = $1 AND scope = 'personal' AND transaction_at >= $2 AND transaction_at <= $3 AND type = 'income'",
     )
     .bind(auth.id)
     .bind(start)
@@ -264,7 +274,7 @@ pub async fn daily_dashboard(
     .unwrap_or(0);
 
     let total_expense = sqlx::query_scalar::<_, Option<i64>>(
-        "SELECT SUM(amount)::bigint FROM transactions WHERE user_id = $1 AND transaction_at >= $2 AND transaction_at <= $3 AND type = 'expense'",
+        "SELECT SUM(amount)::bigint FROM transactions WHERE user_id = $1 AND scope = 'personal' AND transaction_at >= $2 AND transaction_at <= $3 AND type = 'expense'",
     )
     .bind(auth.id)
     .bind(start)
@@ -274,7 +284,7 @@ pub async fn daily_dashboard(
     .unwrap_or(0);
 
     let transactions = sqlx::query_as::<_, Transaction>(
-        "SELECT * FROM transactions WHERE user_id = $1 AND transaction_at >= $2 AND transaction_at <= $3 ORDER BY transaction_at DESC",
+        "SELECT * FROM transactions WHERE user_id = $1 AND scope = 'personal' AND transaction_at >= $2 AND transaction_at <= $3 ORDER BY transaction_at DESC",
     )
     .bind(auth.id)
     .bind(start)
@@ -297,7 +307,9 @@ pub async fn calendar_dashboard(
 ) -> Result<Json<Vec<CalendarDayTotal>>, AppError> {
     let month_start_date = NaiveDate::parse_from_str(&format!("{}-01", query.month), "%Y-%m-%d")
         .map_err(|_| {
-            AppError::BadRequest("월 형식이 올바르지 않습니다. YYYY-MM 형식으로 입력해 주세요".to_string())
+            AppError::BadRequest(
+                "월 형식이 올바르지 않습니다. YYYY-MM 형식으로 입력해 주세요".to_string(),
+            )
         })?;
     let month_start = month_start_date.and_hms_opt(0, 0, 0).unwrap().and_utc();
     let next_month = shift_month(month_start_date, 1)
@@ -310,6 +322,7 @@ pub async fn calendar_dashboard(
         SELECT DATE(transaction_at AT TIME ZONE 'Asia/Seoul') AS day, SUM(amount)::bigint
         FROM transactions
         WHERE user_id = $1
+          AND scope = 'personal'
           AND transaction_at >= $2
           AND transaction_at < $3
           AND type = 'expense'

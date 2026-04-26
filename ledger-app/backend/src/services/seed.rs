@@ -1,5 +1,8 @@
 use anyhow::Result;
-use argon2::{Argon2, PasswordHasher, password_hash::{SaltString, rand_core::OsRng}};
+use argon2::{
+    Argon2, PasswordHasher,
+    password_hash::{SaltString, rand_core::OsRng},
+};
 use sqlx::PgPool;
 use uuid::Uuid;
 
@@ -21,7 +24,7 @@ pub async fn seed_defaults(pool: &PgPool, admin_password: &str) -> Result<()> {
     let mut tx = pool.begin().await?;
 
     sqlx::query(
-        "INSERT INTO users (id, email, display_name, password_hash) VALUES ($1, NULL, $2, $3)",
+        "INSERT INTO users (id, email, display_name, password_hash, role) VALUES ($1, NULL, $2, $3, 'admin')",
     )
     .bind(user_id)
     .bind("관리자")

@@ -66,7 +66,10 @@ pub fn empty_summary() -> CardBenefitSummary {
     }
 }
 
-pub fn calculate_from_json(monthly_spending: i64, preset_json: &serde_json::Value) -> CardBenefitSummary {
+pub fn calculate_from_json(
+    monthly_spending: i64,
+    preset_json: &serde_json::Value,
+) -> CardBenefitSummary {
     let rules = preset_json
         .get("rules")
         .cloned()
@@ -91,13 +94,13 @@ pub fn calculate_from_json(monthly_spending: i64, preset_json: &serde_json::Valu
     calculate_summary(&tx, &merged)
 }
 
-pub fn calculate_summary(transactions: &[RuleTransaction], preset_json: &serde_json::Value) -> CardBenefitSummary {
+pub fn calculate_summary(
+    transactions: &[RuleTransaction],
+    preset_json: &serde_json::Value,
+) -> CardBenefitSummary {
     let config: PresetConfig = serde_json::from_value(preset_json.clone()).unwrap_or_default();
 
-    let monthly_spending = transactions
-        .iter()
-        .map(|tx| tx.amount.max(0))
-        .sum::<i64>();
+    let monthly_spending = transactions.iter().map(|tx| tx.amount.max(0)).sum::<i64>();
 
     let excluded_rules = config.excluded.unwrap_or_default();
     let eligible_transactions = transactions

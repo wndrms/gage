@@ -30,7 +30,8 @@ impl TransactionParser for ShinhanBankParser {
             .map(|v| v.to_string())
             .unwrap_or_else(|| String::from_utf8_lossy(input.content).to_string());
 
-        for marker in ["거래일자", "거래시간", "출금(원)", "입금(원)", "잔액(원)"] {
+        for marker in ["거래일자", "거래시간", "출금(원)", "입금(원)", "잔액(원)"]
+        {
             if sample.contains(marker) {
                 score += 0.15;
             }
@@ -43,7 +44,10 @@ impl TransactionParser for ShinhanBankParser {
         let (headers, rows) = csv_records(content)?;
         let map = header_map(&headers);
 
-        let date_idx = ensure_column(pick_col(&map, &["거래일자", "일자", "날짜"]), "거래일자 열이 필요합니다")?;
+        let date_idx = ensure_column(
+            pick_col(&map, &["거래일자", "일자", "날짜"]),
+            "거래일자 열이 필요합니다",
+        )?;
         let time_idx = pick_col(&map, &["거래시간", "시간"]);
         let brief_idx = pick_col(&map, &["적요", "내용"]);
         let outflow_idx = pick_col(&map, &["출금(원)", "출금", "지출"]);
@@ -78,7 +82,11 @@ impl TransactionParser for ShinhanBankParser {
                 posted_at: None,
                 r#type: typ,
                 amount,
-                merchant_name: if merchant.is_empty() { None } else { Some(merchant) },
+                merchant_name: if merchant.is_empty() {
+                    None
+                } else {
+                    Some(merchant)
+                },
                 description: if description.is_empty() {
                     None
                 } else {

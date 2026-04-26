@@ -1,4 +1,7 @@
-use axum::{Json, extract::{Path, State}};
+use axum::{
+    Json,
+    extract::{Path, State},
+};
 use serde::Deserialize;
 use uuid::Uuid;
 
@@ -18,9 +21,10 @@ pub async fn list_card_presets(
     State(state): State<AppState>,
     _auth: AuthUser,
 ) -> Result<Json<Vec<CardPreset>>, AppError> {
-    let rows = sqlx::query_as::<_, CardPreset>("SELECT * FROM card_presets ORDER BY created_at DESC")
-        .fetch_all(&state.pool)
-        .await?;
+    let rows =
+        sqlx::query_as::<_, CardPreset>("SELECT * FROM card_presets ORDER BY created_at DESC")
+            .fetch_all(&state.pool)
+            .await?;
     Ok(Json(rows))
 }
 
@@ -30,7 +34,9 @@ pub async fn create_card_preset(
     Json(payload): Json<CardPresetPayload>,
 ) -> Result<Json<CardPreset>, AppError> {
     if payload.issuer.trim().is_empty() || payload.card_name.trim().is_empty() {
-        return Err(AppError::BadRequest("카드사와 카드명을 입력해 주세요".to_string()));
+        return Err(AppError::BadRequest(
+            "카드사와 카드명을 입력해 주세요".to_string(),
+        ));
     }
 
     let row = sqlx::query_as::<_, CardPreset>(

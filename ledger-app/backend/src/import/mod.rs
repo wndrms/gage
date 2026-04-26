@@ -12,7 +12,10 @@ use parser::{DetectInput, NormalizedTransaction, TransactionParser};
 use sqlx::PgPool;
 use uuid::Uuid;
 
-use crate::models::{ImportRecord, ImportRow};
+use crate::{
+    models::{ImportRecord, ImportRow},
+    services::{kream_rules::infer_kream_kind, transaction_scope::infer_scope},
+};
 
 #[derive(Debug, Clone)]
 pub struct ImportSummary {
@@ -72,14 +75,18 @@ pub async fn create_import_preview(
     .await?;
 
     let parser_list = parsers();
-    let sample_text = String::from_utf8_lossy(content).chars().take(600).collect::<String>();
+    let sample_text = String::from_utf8_lossy(content)
+        .chars()
+        .take(600)
+        .collect::<String>();
     let detect_input = DetectInput {
         filename: import.original_filename.as_deref(),
         sample_text: Some(&sample_text),
         content,
     };
 
-    let parser = detect_best_parser(&parser_list, &detect_input).ok_or_else(|| anyhow!("적합한 파서를 찾을 수 없습니다"))?;
+    let parser = detect_best_parser(&parser_list, &detect_input)
+        .ok_or_else(|| anyhow!("적합한 파서를 찾을 수 없습니다"))?;
 
     let parse_result = parser.parse(content);
     let rows = match parse_result {
@@ -189,17 +196,20 @@ pub async fn create_import_preview(
     ))
 }
 
-pub async fn confirm_import(pool: &PgPool, user_id: Uuid, import_id: Uuid) -> Result<ImportSummary> {
+pub async fn confirm_import(
+    pool: &PgPool,
+    user_id: Uuid,
+    import_id: Uuid,
+) -> Result<ImportSummary> {
     let mut tx = pool.begin().await?;
 
-    let import = sqlx::query_as::<_, ImportRecord>(
-        "SELECT * FROM imports WHERE id = $1 AND user_id = $2",
-    )
-    .bind(import_id)
-    .bind(user_id)
-    .fetch_optional(&mut *tx)
-    .await?
-    .ok_or_else(|| anyhow!("가져오기 정보를 찾을 수 없습니다"))?;
+    let import =
+        sqlx::query_as::<_, ImportRecord>("SELECT * FROM imports WHERE id = $1 AND user_id = $2")
+            .bind(import_id)
+            .bind(user_id)
+            .fetch_optional(&mut *tx)
+            .await?
+            .ok_or_else(|| anyhow!("가져오기 정보를 찾을 수 없습니다"))?;
 
     match import.status.as_str() {
         "imported" => {
@@ -224,14 +234,16 @@ pub async fn confirm_import(pool: &PgPool, user_id: Uuid, import_id: Uuid) -> Re
     .fetch_all(&mut *tx)
     .await?;
 
-    let accounts = sqlx::query_as::<_, (Uuid, String)>("SELECT id, name FROM accounts WHERE user_id = $1")
-        .bind(user_id)
-        .fetch_all(&mut *tx)
-        .await?;
-    let cards = sqlx::query_as::<_, (Uuid, String)>("SELECT id, card_name FROM cards WHERE user_id = $1")
-        .bind(user_id)
-        .fetch_all(&mut *tx)
-        .await?;
+    let accounts =
+        sqlx::query_as::<_, (Uuid, String)>("SELECT id, name FROM accounts WHERE user_id = $1")
+            .bind(user_id)
+            .fetch_all(&mut *tx)
+            .await?;
+    let cards =
+        sqlx::query_as::<_, (Uuid, String)>("SELECT id, card_name FROM cards WHERE user_id = $1")
+            .bind(user_id)
+            .fetch_all(&mut *tx)
+            .await?;
 
     let account_map = accounts
         .into_iter()
@@ -318,9 +330,10 @@ pub async fn confirm_import(pool: &PgPool, user_id: Uuid, import_id: Uuid) -> Re
             _ => "file",
         };
 
-        let dedupe_key = parsed.dedupe_key.clone().unwrap_or_else(|| {
-            normalize_row_dedupe_key(user_id, &parsed)
-        });
+        let dedupe_key = parsed
+            .dedupe_key
+            .clone()
+            .unwrap_or_else(|| normalize_row_dedupe_key(user_id, &parsed));
         let dedupe_key_for_upsert = dedupe_key.clone();
         let source_institution_for_upsert = source_institution.clone();
 
@@ -329,7 +342,27 @@ pub async fn confirm_import(pool: &PgPool, user_id: Uuid, import_id: Uuid) -> Re
             pool,
             user_id,
             parsed.merchant_name.as_deref(),
-        ).await;
+        )
+        .await;
+        let scope = infer_scope(
+            parsed.merchant_name.as_deref(),
+            parsed.description.as_deref(),
+        );
+        let kream_kind = infer_kream_kind(
+            pool,
+            user_id,
+            parsed.merchant_name.as_deref(),
+            parsed.description.as_deref(),
+            None,
+        )
+        .await?;
+        let scope = if kream_kind.is_some() {
+            "kream".to_string()
+        } else {
+            scope
+        };
+        let scope_for_upsert = scope.clone();
+        let kream_kind_for_upsert = kream_kind.clone();
 
         let insert = sqlx::query(
             r#"
@@ -337,13 +370,13 @@ pub async fn confirm_import(pool: &PgPool, user_id: Uuid, import_id: Uuid) -> Re
                 id, user_id, transaction_at, posted_at, type, amount,
                 merchant_name, description, category_id, account_id, card_id,
                 source_type, source_institution, source_file_id, balance_after,
-                raw_data, dedupe_key, memo
+                raw_data, dedupe_key, memo, scope, kream_kind
             )
             VALUES (
                 $1, $2, $3, $4, $5, $6,
                 $7, $8, $9, $10, $11,
                 $12, $13, $14, $15,
-                $16, $17, NULL
+                $16, $17, NULL, $18, $19
             )
             "#,
         )
@@ -364,6 +397,8 @@ pub async fn confirm_import(pool: &PgPool, user_id: Uuid, import_id: Uuid) -> Re
         .bind(parsed.balance_after)
         .bind(parsed.raw_data)
         .bind(dedupe_key)
+        .bind(scope)
+        .bind(kream_kind)
         .execute(&mut *tx)
         .await;
 
@@ -376,6 +411,8 @@ pub async fn confirm_import(pool: &PgPool, user_id: Uuid, import_id: Uuid) -> Re
                     SET card_id = COALESCE(card_id, $3),
                         account_id = COALESCE(account_id, $4),
                         source_institution = COALESCE(source_institution, $5),
+                        scope = CASE WHEN $6 = 'kream' THEN 'kream' ELSE scope END,
+                        kream_kind = COALESCE($7, kream_kind),
                         updated_at = now()
                     WHERE user_id = $1
                       AND dedupe_key = $2
@@ -386,6 +423,8 @@ pub async fn confirm_import(pool: &PgPool, user_id: Uuid, import_id: Uuid) -> Re
                 .bind(card_id)
                 .bind(account_id)
                 .bind(source_institution_for_upsert)
+                .bind(scope_for_upsert)
+                .bind(kream_kind_for_upsert)
                 .execute(&mut *tx)
                 .await?;
                 duplicate_count += 1;
@@ -433,13 +472,19 @@ pub async fn confirm_import(pool: &PgPool, user_id: Uuid, import_id: Uuid) -> Re
 }
 
 pub async fn first_user_id(pool: &PgPool) -> Result<Option<Uuid>> {
-    let user_id = sqlx::query_scalar::<_, Option<Uuid>>("SELECT id FROM users ORDER BY created_at ASC LIMIT 1")
-        .fetch_one(pool)
-        .await?;
+    let user_id = sqlx::query_scalar::<_, Option<Uuid>>(
+        "SELECT id FROM users ORDER BY created_at ASC LIMIT 1",
+    )
+    .fetch_one(pool)
+    .await?;
     Ok(user_id)
 }
 
-pub async fn process_file_from_path(pool: &PgPool, user_id: Uuid, path: &std::path::Path) -> Result<()> {
+pub async fn process_file_from_path(
+    pool: &PgPool,
+    user_id: Uuid,
+    path: &std::path::Path,
+) -> Result<()> {
     let content = tokio::fs::read(path).await?;
     let filename = path.file_name().map(|v| v.to_string_lossy().to_string());
 
@@ -452,7 +497,8 @@ pub async fn process_file_from_path(pool: &PgPool, user_id: Uuid, path: &std::pa
         "csv"
     };
 
-    let institution = detect_institution_from_filename(filename.as_deref()).unwrap_or_else(|| "unknown".to_string());
+    let institution = detect_institution_from_filename(filename.as_deref())
+        .unwrap_or_else(|| "unknown".to_string());
 
     let _ = create_import_preview(
         pool,
@@ -592,13 +638,18 @@ pub async fn list_imports(pool: &PgPool, user_id: Uuid) -> Result<Vec<ImportReco
     Ok(rows)
 }
 
-pub async fn get_import(pool: &PgPool, user_id: Uuid, import_id: Uuid) -> Result<(ImportRecord, Vec<ImportRow>)> {
-    let import = sqlx::query_as::<_, ImportRecord>("SELECT * FROM imports WHERE id = $1 AND user_id = $2")
-        .bind(import_id)
-        .bind(user_id)
-        .fetch_optional(pool)
-        .await?
-        .ok_or_else(|| anyhow!("가져오기 정보를 찾을 수 없습니다"))?;
+pub async fn get_import(
+    pool: &PgPool,
+    user_id: Uuid,
+    import_id: Uuid,
+) -> Result<(ImportRecord, Vec<ImportRow>)> {
+    let import =
+        sqlx::query_as::<_, ImportRecord>("SELECT * FROM imports WHERE id = $1 AND user_id = $2")
+            .bind(import_id)
+            .bind(user_id)
+            .fetch_optional(pool)
+            .await?
+            .ok_or_else(|| anyhow!("가져오기 정보를 찾을 수 없습니다"))?;
 
     let rows = sqlx::query_as::<_, ImportRow>(
         "SELECT * FROM import_rows WHERE import_id = $1 AND user_id = $2 ORDER BY row_index ASC",
@@ -622,7 +673,9 @@ pub async fn cancel_import(pool: &PgPool, user_id: Uuid, import_id: Uuid) -> Res
     .await?;
 
     if result.rows_affected() == 0 {
-        return Err(anyhow!("취소할 수 없는 상태입니다. 이미 저장 완료되었거나 존재하지 않는 항목입니다."));
+        return Err(anyhow!(
+            "취소할 수 없는 상태입니다. 이미 저장 완료되었거나 존재하지 않는 항목입니다."
+        ));
     }
 
     Ok(())

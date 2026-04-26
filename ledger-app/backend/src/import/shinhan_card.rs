@@ -1,8 +1,8 @@
 use anyhow::{Result, bail};
 
 use super::parser::{
-    DetectInput, NormalizedTransaction, TransactionParser, header_map,
-    parse_amount, parse_local_datetime, pick_col, row_value, sheet_rows,
+    DetectInput, NormalizedTransaction, TransactionParser, header_map, parse_amount,
+    parse_local_datetime, pick_col, row_value, sheet_rows,
 };
 
 #[derive(Debug, Default)]
@@ -29,7 +29,15 @@ impl TransactionParser for ShinhanCardParser {
             .sample_text
             .map(|v| v.to_string())
             .unwrap_or_else(|| String::from_utf8_lossy(input.content).to_string());
-        for marker in ["거래일", "이용일자", "승인일자", "가맹점", "이용금액", "승인금액", "승인번호"] {
+        for marker in [
+            "거래일",
+            "이용일자",
+            "승인일자",
+            "가맹점",
+            "이용금액",
+            "승인금액",
+            "승인번호",
+        ] {
             if sample.contains(marker) {
                 score += 0.05;
             }
@@ -43,19 +51,17 @@ impl TransactionParser for ShinhanCardParser {
             bail!("엑셀 데이터가 비어 있습니다");
         }
 
-        let header_idx = rows
-            .iter()
-            .position(|row| {
-                row.iter().any(|cell| {
-                    let cell = cell.replace(' ', "");
-                    cell.contains("이용일자")
-                        || cell.contains("승인일자")
-                        || cell.contains("거래일")
-                        || cell.contains("매출일")
-                        || cell.contains("가맹점")
-                        || cell.contains("이용금액")
-                })
-            });
+        let header_idx = rows.iter().position(|row| {
+            row.iter().any(|cell| {
+                let cell = cell.replace(' ', "");
+                cell.contains("이용일자")
+                    || cell.contains("승인일자")
+                    || cell.contains("거래일")
+                    || cell.contains("매출일")
+                    || cell.contains("가맹점")
+                    || cell.contains("이용금액")
+            })
+        });
 
         let header_idx = match header_idx {
             Some(idx) => idx,
@@ -73,7 +79,10 @@ impl TransactionParser for ShinhanCardParser {
 
         tracing::debug!(headers = ?headers, "신한카드 헤더 인식");
 
-        let date_idx = match pick_col(&map, &["거래일", "승인일자", "이용일자", "일자", "날짜", "매출일"]) {
+        let date_idx = match pick_col(
+            &map,
+            &["거래일", "승인일자", "이용일자", "일자", "날짜", "매출일"],
+        ) {
             Some(idx) => idx,
             None => bail!(
                 "날짜 열을 찾을 수 없습니다. 인식된 헤더: {}",
@@ -81,10 +90,16 @@ impl TransactionParser for ShinhanCardParser {
             ),
         };
         let merchant_idx = pick_col(&map, &["가맹점명", "가맹점", "이용처", "가맹점/ATM명"]);
-        let amount_idx = pick_col(&map, &["금액", "승인금액", "이용금액", "거래금액", "매출금액"]);
+        let amount_idx = pick_col(
+            &map,
+            &["금액", "승인금액", "이용금액", "거래금액", "매출금액"],
+        );
         let card_name_idx = pick_col(&map, &["이용카드", "카드명", "카드"]);
         let approval_idx = pick_col(&map, &["승인번호", "승인no", "approval"]);
-        let cancel_idx = pick_col(&map, &["취소상태", "취소여부", "승인취소", "취소", "매입구분"]);
+        let cancel_idx = pick_col(
+            &map,
+            &["취소상태", "취소여부", "승인취소", "취소", "매입구분"],
+        );
         let installment_idx = pick_col(&map, &["이용구분", "할부", "할부개월"]);
 
         let mut result = Vec::new();
@@ -134,13 +149,29 @@ impl TransactionParser for ShinhanCardParser {
                 posted_at: None,
                 r#type: "expense".to_string(),
                 amount: amount.abs(),
-                merchant_name: if merchant_name.is_empty() { None } else { Some(merchant_name) },
-                description: if installment.is_empty() { None } else { Some(installment) },
+                merchant_name: if merchant_name.is_empty() {
+                    None
+                } else {
+                    Some(merchant_name)
+                },
+                description: if installment.is_empty() {
+                    None
+                } else {
+                    Some(installment)
+                },
                 account_name: None,
-                card_name: if card_name.is_empty() { None } else { Some(card_name) },
+                card_name: if card_name.is_empty() {
+                    None
+                } else {
+                    Some(card_name)
+                },
                 source_institution: Some("shinhan_card".to_string()),
                 balance_after: None,
-                approval_number: if approval_number.is_empty() { None } else { Some(approval_number) },
+                approval_number: if approval_number.is_empty() {
+                    None
+                } else {
+                    Some(approval_number)
+                },
                 raw_data: serde_json::json!({}),
                 dedupe_key: None,
             });

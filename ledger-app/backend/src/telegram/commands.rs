@@ -3,7 +3,10 @@ use chrono::{Datelike, FixedOffset, NaiveDate, NaiveDateTime, NaiveTime, Utc};
 use sqlx::PgPool;
 use uuid::Uuid;
 
-use crate::{import, import::dedupe::build_dedupe_key, telegram::parser};
+use crate::{
+    import, import::dedupe::build_dedupe_key, services::kream_rules::infer_kream_kind,
+    telegram::parser,
+};
 
 pub async fn handle_text_command(pool: &PgPool, user_id: Uuid, text: &str) -> Result<String> {
     let parsed = match parser::parse_command(text) {
@@ -20,7 +23,10 @@ pub async fn handle_text_command(pool: &PgPool, user_id: Uuid, text: &str) -> Re
         "/cards" => cards_summary(pool, user_id).await,
         "/import" => list_pending_imports(pool, user_id).await,
         "/ok" => confirm_pending_import(pool, user_id, parsed.args.first()).await,
-        _ => Ok("지원하지 않는 명령입니다. 사용 가능: /today /month /add /cards /import /ok".to_string()),
+        _ => Ok(
+            "지원하지 않는 명령입니다. 사용 가능: /today /month /add /cards /import /ok"
+                .to_string(),
+        ),
     }
 }
 
@@ -31,7 +37,7 @@ async fn today_summary(pool: &PgPool, user_id: Uuid) -> Result<String> {
     let end = kst_date_time(date, NaiveTime::from_hms_opt(23, 59, 59).unwrap())?;
 
     let total_expense = sqlx::query_scalar::<_, Option<i64>>(
-        "SELECT SUM(amount)::bigint FROM transactions WHERE user_id = $1 AND type = 'expense' AND amount > 0 AND transaction_at >= $2 AND transaction_at <= $3",
+        "SELECT SUM(amount)::bigint FROM transactions WHERE user_id = $1 AND scope = 'personal' AND type = 'expense' AND amount > 0 AND transaction_at >= $2 AND transaction_at <= $3",
     )
     .bind(user_id)
     .bind(start)
@@ -41,7 +47,7 @@ async fn today_summary(pool: &PgPool, user_id: Uuid) -> Result<String> {
     .unwrap_or(0);
 
     let total_income = sqlx::query_scalar::<_, Option<i64>>(
-        "SELECT SUM(amount)::bigint FROM transactions WHERE user_id = $1 AND type = 'income' AND amount > 0 AND transaction_at >= $2 AND transaction_at <= $3",
+        "SELECT SUM(amount)::bigint FROM transactions WHERE user_id = $1 AND scope = 'personal' AND type = 'income' AND amount > 0 AND transaction_at >= $2 AND transaction_at <= $3",
     )
     .bind(user_id)
     .bind(start)
@@ -55,6 +61,7 @@ async fn today_summary(pool: &PgPool, user_id: Uuid) -> Result<String> {
         SELECT merchant_name, description, amount
         FROM transactions
         WHERE user_id = $1
+          AND scope = 'personal'
           AND type = 'expense'
           AND amount > 0
           AND transaction_at >= $2
@@ -102,7 +109,7 @@ async fn month_summary(pool: &PgPool, user_id: Uuid) -> Result<String> {
     let end = kst_date_time(next_month_date, NaiveTime::from_hms_opt(0, 0, 0).unwrap())?;
 
     let total_expense = sqlx::query_scalar::<_, Option<i64>>(
-        "SELECT SUM(amount)::bigint FROM transactions WHERE user_id = $1 AND type = 'expense' AND amount > 0 AND transaction_at >= $2 AND transaction_at < $3",
+        "SELECT SUM(amount)::bigint FROM transactions WHERE user_id = $1 AND scope = 'personal' AND type = 'expense' AND amount > 0 AND transaction_at >= $2 AND transaction_at < $3",
     )
     .bind(user_id)
     .bind(start)
@@ -112,7 +119,7 @@ async fn month_summary(pool: &PgPool, user_id: Uuid) -> Result<String> {
     .unwrap_or(0);
 
     let total_income = sqlx::query_scalar::<_, Option<i64>>(
-        "SELECT SUM(amount)::bigint FROM transactions WHERE user_id = $1 AND type = 'income' AND amount > 0 AND transaction_at >= $2 AND transaction_at < $3",
+        "SELECT SUM(amount)::bigint FROM transactions WHERE user_id = $1 AND scope = 'personal' AND type = 'income' AND amount > 0 AND transaction_at >= $2 AND transaction_at < $3",
     )
     .bind(user_id)
     .bind(start)
@@ -163,6 +170,13 @@ async fn add_expense(pool: &PgPool, user_id: Uuid, args: &[String]) -> Result<St
         None,
         None,
     );
+    let kream_kind =
+        infer_kream_kind(pool, user_id, Some(&merchant_name), memo.as_deref(), None).await?;
+    let scope = if kream_kind.is_some() {
+        "kream"
+    } else {
+        "personal"
+    };
 
     let insert = sqlx::query(
         r#"
@@ -170,12 +184,12 @@ async fn add_expense(pool: &PgPool, user_id: Uuid, args: &[String]) -> Result<St
             id, user_id, transaction_at, posted_at, type, amount,
             merchant_name, description, category_id, account_id, card_id,
             source_type, source_institution, source_file_id, balance_after,
-            raw_data, dedupe_key, memo
+            raw_data, dedupe_key, memo, scope, kream_kind
         ) VALUES (
             $1, $2, $3, NULL, 'expense', $4,
             $5, NULL, NULL, NULL, NULL,
             'telegram', 'telegram', NULL, NULL,
-            '{}'::jsonb, $6, $7
+            '{}'::jsonb, $6, $7, $8, $9
         )
         "#,
     )
@@ -186,6 +200,8 @@ async fn add_expense(pool: &PgPool, user_id: Uuid, args: &[String]) -> Result<St
     .bind(merchant_name.clone())
     .bind(dedupe_key)
     .bind(memo.clone())
+    .bind(scope)
+    .bind(kream_kind)
     .execute(pool)
     .await;
 
@@ -220,6 +236,7 @@ async fn cards_summary(pool: &PgPool, user_id: Uuid) -> Result<String> {
         FROM transactions t
         LEFT JOIN cards c ON t.card_id = c.id
         WHERE t.user_id = $1
+          AND t.scope = 'personal'
           AND t.type = 'expense'
           AND t.amount > 0
           AND t.transaction_at >= $2
@@ -247,7 +264,17 @@ async fn cards_summary(pool: &PgPool, user_id: Uuid) -> Result<String> {
 }
 
 async fn list_pending_imports(pool: &PgPool, user_id: Uuid) -> Result<String> {
-    let rows = sqlx::query_as::<_, (Uuid, Option<String>, String, i32, i32, chrono::DateTime<Utc>)>(
+    let rows = sqlx::query_as::<
+        _,
+        (
+            Uuid,
+            Option<String>,
+            String,
+            i32,
+            i32,
+            chrono::DateTime<Utc>,
+        ),
+    >(
         r#"
         SELECT id, original_filename, institution, parsed_count, duplicate_count, created_at
         FROM imports
@@ -262,7 +289,10 @@ async fn list_pending_imports(pool: &PgPool, user_id: Uuid) -> Result<String> {
     .await?;
 
     if rows.is_empty() {
-        return Ok("확정 대기 중인 가져오기가 없습니다. 먼저 파일을 가져오고 미리보기를 생성해 주세요.".to_string());
+        return Ok(
+            "확정 대기 중인 가져오기가 없습니다. 먼저 파일을 가져오고 미리보기를 생성해 주세요."
+                .to_string(),
+        );
     }
 
     let mut reply = String::from("확정 가능한 가져오기 목록\n");
@@ -270,19 +300,28 @@ async fn list_pending_imports(pool: &PgPool, user_id: Uuid) -> Result<String> {
         let code = short_id(id);
         let title = filename.unwrap_or(institution);
         let new_count = parsed_count.saturating_sub(duplicate_count);
-        let date_label = created_at.with_timezone(&kst()?).format("%m-%d %H:%M").to_string();
+        let date_label = created_at
+            .with_timezone(&kst()?)
+            .format("%m-%d %H:%M")
+            .to_string();
 
         reply.push_str(&format!(
             "- 코드 {} | {} | 신규 {}건 | 중복 {}건 | {}\n",
             code, title, new_count, duplicate_count, date_label
         ));
     }
-    reply.push_str("\n저장하려면 /ok 코드 를 입력하세요. 코드 없이 /ok 를 입력하면 가장 최근 건을 저장합니다.");
+    reply.push_str(
+        "\n저장하려면 /ok 코드 를 입력하세요. 코드 없이 /ok 를 입력하면 가장 최근 건을 저장합니다.",
+    );
 
     Ok(reply)
 }
 
-async fn confirm_pending_import(pool: &PgPool, user_id: Uuid, code: Option<&String>) -> Result<String> {
+async fn confirm_pending_import(
+    pool: &PgPool,
+    user_id: Uuid,
+    code: Option<&String>,
+) -> Result<String> {
     let rows = sqlx::query_as::<_, (Uuid, Option<String>, String, i32, i32)>(
         r#"
         SELECT id, original_filename, institution, parsed_count, duplicate_count
@@ -310,10 +349,14 @@ async fn confirm_pending_import(pool: &PgPool, user_id: Uuid, code: Option<&Stri
             .collect::<Vec<_>>();
 
         if matched.is_empty() {
-            return Ok("해당 코드를 찾을 수 없습니다. /import 로 코드를 확인해 주세요.".to_string());
+            return Ok(
+                "해당 코드를 찾을 수 없습니다. /import 로 코드를 확인해 주세요.".to_string(),
+            );
         }
         if matched.len() > 1 {
-            return Ok("코드가 여러 항목과 일치합니다. 더 긴 코드로 다시 입력해 주세요.".to_string());
+            return Ok(
+                "코드가 여러 항목과 일치합니다. 더 긴 코드로 다시 입력해 주세요.".to_string(),
+            );
         }
         matched.remove(0)
     } else {

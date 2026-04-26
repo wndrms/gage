@@ -15,7 +15,10 @@ pub fn build_dedupe_key(
 ) -> String {
     let mut normalized = vec![
         user_id.to_string(),
-        source_institution.unwrap_or("unknown").trim().to_lowercase(),
+        source_institution
+            .unwrap_or("unknown")
+            .trim()
+            .to_lowercase(),
         transaction_at.format("%Y-%m-%dT%H:%M:%S").to_string(),
         amount.to_string(),
         merchant_name.unwrap_or("").trim().to_lowercase(),

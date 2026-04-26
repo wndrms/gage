@@ -1,8 +1,8 @@
 use anyhow::{Result, bail};
 
 use super::parser::{
-    DetectInput, NormalizedTransaction, TransactionParser, header_map,
-    parse_amount, parse_korean_date, html_table_rows, pick_col, row_value,
+    DetectInput, NormalizedTransaction, TransactionParser, header_map, html_table_rows,
+    parse_amount, parse_korean_date, pick_col, row_value,
 };
 use chrono::{FixedOffset, NaiveDateTime, NaiveTime};
 
@@ -30,7 +30,13 @@ impl TransactionParser for HyundaiCardParser {
             .sample_text
             .map(|v| v.to_string())
             .unwrap_or_else(|| String::from_utf8_lossy(input.content).to_string());
-        for marker in ["이용일자", "카드명(카드뒤4자리)", "이용금액", "결제예정일", "현대카드"] {
+        for marker in [
+            "이용일자",
+            "카드명(카드뒤4자리)",
+            "이용금액",
+            "결제예정일",
+            "현대카드",
+        ] {
             if sample.contains(marker) {
                 score += 0.1;
             }
@@ -45,13 +51,11 @@ impl TransactionParser for HyundaiCardParser {
         }
 
         // 헤더 행 찾기
-        let header_idx = rows
-            .iter()
-            .position(|row| {
-                row.iter().any(|cell| {
-                    cell.contains("이용일자") || cell.contains("가맹점명") || cell.contains("이용금액")
-                })
-            });
+        let header_idx = rows.iter().position(|row| {
+            row.iter().any(|cell| {
+                cell.contains("이용일자") || cell.contains("가맹점명") || cell.contains("이용금액")
+            })
+        });
 
         let header_idx = match header_idx {
             Some(idx) => idx,
@@ -124,13 +128,29 @@ impl TransactionParser for HyundaiCardParser {
                 posted_at: None,
                 r#type: "expense".to_string(),
                 amount,
-                merchant_name: if merchant_name.is_empty() { None } else { Some(merchant_name) },
-                description: if installment.is_empty() { None } else { Some(installment) },
+                merchant_name: if merchant_name.is_empty() {
+                    None
+                } else {
+                    Some(merchant_name)
+                },
+                description: if installment.is_empty() {
+                    None
+                } else {
+                    Some(installment)
+                },
                 account_name: None,
-                card_name: if card_name.is_empty() { None } else { Some(card_name) },
+                card_name: if card_name.is_empty() {
+                    None
+                } else {
+                    Some(card_name)
+                },
                 source_institution: Some("hyundai_card".to_string()),
                 balance_after: None,
-                approval_number: if approval_number.is_empty() { None } else { Some(approval_number) },
+                approval_number: if approval_number.is_empty() {
+                    None
+                } else {
+                    Some(approval_number)
+                },
                 raw_data: serde_json::json!({}),
                 dedupe_key: None,
             });
