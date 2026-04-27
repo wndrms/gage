@@ -14,5 +14,5 @@ pub async fn connect(config: &AppConfig) -> Result<PgPool> {
 
 pub async fn migrate(pool: &PgPool) -> Result<()> {
     sqlx::migrate!("./migrations").run(pool).await?;
-    Ok(())
+    Ok(()) // migrations: 202604270004
 }

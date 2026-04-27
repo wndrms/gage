@@ -87,34 +87,36 @@ pub async fn list_transactions(
     State(state): State<AppState>,
     auth: AuthUser,
 ) -> Result<Json<Vec<Transaction>>, AppError> {
-    let mut qb = QueryBuilder::<sqlx::Postgres>::new("SELECT * FROM transactions WHERE user_id = ");
+    let mut qb = QueryBuilder::<sqlx::Postgres>::new(
+        "SELECT t.*, cd.card_name FROM transactions t LEFT JOIN cards cd ON t.card_id = cd.id WHERE t.user_id = ",
+    );
     qb.push_bind(auth.id);
 
     if let Some(start_date) = &query.start_date {
         let start_date = NaiveDate::parse_from_str(start_date, "%Y-%m-%d")
             .map_err(|_| AppError::BadRequest("시작일 형식이 올바르지 않습니다".to_string()))?;
-        qb.push(" AND transaction_at >= ")
+        qb.push(" AND t.transaction_at >= ")
             .push_bind(start_date.and_hms_opt(0, 0, 0).unwrap().and_utc());
     }
 
     if let Some(end_date) = &query.end_date {
         let end_date = NaiveDate::parse_from_str(end_date, "%Y-%m-%d")
             .map_err(|_| AppError::BadRequest("종료일 형식이 올바르지 않습니다".to_string()))?;
-        qb.push(" AND transaction_at <= ")
+        qb.push(" AND t.transaction_at <= ")
             .push_bind(end_date.and_hms_opt(23, 59, 59).unwrap().and_utc());
     }
 
     if let Some(v) = &query.r#type {
-        qb.push(" AND type = ").push_bind(v);
+        qb.push(" AND t.type = ").push_bind(v);
     }
     if let Some(v) = query.account_id {
-        qb.push(" AND account_id = ").push_bind(v);
+        qb.push(" AND t.account_id = ").push_bind(v);
     }
     if let Some(v) = query.card_id {
-        qb.push(" AND card_id = ").push_bind(v);
+        qb.push(" AND t.card_id = ").push_bind(v);
     }
     if let Some(v) = query.category_id {
-        qb.push(" AND category_id = ").push_bind(v);
+        qb.push(" AND t.category_id = ").push_bind(v);
     }
     let scope = query.scope.as_deref().unwrap_or("personal");
     if scope != "all" {
@@ -123,20 +125,20 @@ pub async fn list_transactions(
                 "scope must be personal, kream, or all".to_string(),
             ));
         }
-        qb.push(" AND scope = ").push_bind(scope);
+        qb.push(" AND t.scope = ").push_bind(scope);
     }
     if let Some(keyword) = &query.keyword {
         let pattern = format!("%{}%", keyword.trim());
-        qb.push(" AND (merchant_name ILIKE ")
+        qb.push(" AND (t.merchant_name ILIKE ")
             .push_bind(pattern.clone())
-            .push(" OR description ILIKE ")
+            .push(" OR t.description ILIKE ")
             .push_bind(pattern.clone())
-            .push(" OR memo ILIKE ")
+            .push(" OR t.memo ILIKE ")
             .push_bind(pattern)
             .push(")");
     }
 
-    qb.push(" ORDER BY transaction_at DESC, created_at DESC");
+    qb.push(" ORDER BY t.transaction_at DESC, t.created_at DESC");
     let rows = qb
         .build_query_as::<Transaction>()
         .fetch_all(&state.pool)
@@ -203,19 +205,22 @@ pub async fn create_transaction(
 
     let row = sqlx::query_as::<_, Transaction>(
         r#"
-        INSERT INTO transactions (
-            id, user_id, transaction_at, posted_at, type, amount,
-            merchant_name, description, category_id, account_id, card_id,
-            source_type, source_institution, source_file_id, balance_after,
-            raw_data, dedupe_key, memo, scope, kream_kind
+        WITH ins AS (
+            INSERT INTO transactions (
+                id, user_id, transaction_at, posted_at, type, amount,
+                merchant_name, description, category_id, account_id, card_id,
+                source_type, source_institution, source_file_id, balance_after,
+                raw_data, dedupe_key, memo, scope, kream_kind
+            )
+            VALUES (
+                $1, $2, $3, $4, $5, $6,
+                $7, $8, $9, $10, $11,
+                $12, $13, $14, $15,
+                $16, $17, $18, $19, $20
+            )
+            RETURNING *
         )
-        VALUES (
-            $1, $2, $3, $4, $5, $6,
-            $7, $8, $9, $10, $11,
-            $12, $13, $14, $15,
-            $16, $17, $18, $19, $20
-        )
-        RETURNING *
+        SELECT ins.*, cd.card_name FROM ins LEFT JOIN cards cd ON ins.card_id = cd.id
         "#,
     )
     .bind(Uuid::new_v4())
@@ -258,7 +263,7 @@ pub async fn get_transaction(
     auth: AuthUser,
 ) -> Result<Json<Transaction>, AppError> {
     let row = sqlx::query_as::<_, Transaction>(
-        "SELECT * FROM transactions WHERE id = $1 AND user_id = $2",
+        "SELECT t.*, cd.card_name FROM transactions t LEFT JOIN cards cd ON t.card_id = cd.id WHERE t.id = $1 AND t.user_id = $2",
     )
     .bind(id)
     .bind(auth.id)
@@ -316,29 +321,32 @@ pub async fn update_transaction(
 
     let row = sqlx::query_as::<_, Transaction>(
         r#"
-        UPDATE transactions
-        SET
-            transaction_at = $3,
-            posted_at = $4,
-            type = $5,
-            amount = $6,
-            merchant_name = $7,
-            description = $8,
-            category_id = $9,
-            account_id = $10,
-            card_id = $11,
-            source_type = $12,
-            source_institution = $13,
-            source_file_id = $14,
-            balance_after = $15,
-            raw_data = $16,
-            dedupe_key = $17,
-            memo = $18,
-            scope = $19,
-            kream_kind = $20,
-            updated_at = now()
-        WHERE id = $1 AND user_id = $2
-        RETURNING *
+        WITH upd AS (
+            UPDATE transactions
+            SET
+                transaction_at = $3,
+                posted_at = $4,
+                type = $5,
+                amount = $6,
+                merchant_name = $7,
+                description = $8,
+                category_id = $9,
+                account_id = $10,
+                card_id = $11,
+                source_type = $12,
+                source_institution = $13,
+                source_file_id = $14,
+                balance_after = $15,
+                raw_data = $16,
+                dedupe_key = $17,
+                memo = $18,
+                scope = $19,
+                kream_kind = $20,
+                updated_at = now()
+            WHERE id = $1 AND user_id = $2
+            RETURNING *
+        )
+        SELECT upd.*, cd.card_name FROM upd LEFT JOIN cards cd ON upd.card_id = cd.id
         "#,
     )
     .bind(id)

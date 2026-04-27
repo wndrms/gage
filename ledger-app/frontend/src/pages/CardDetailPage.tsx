@@ -1,15 +1,17 @@
 import { useMemo, useState } from 'react';
 import { Link, useParams } from 'react-router-dom';
-import { useQuery } from '@tanstack/react-query';
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { resourceApi } from '@/api/resources';
 import { currentMonth, dateTime, money } from '@/utils/format';
 
 export default function CardDetailPage() {
   const { id } = useParams();
+  const client = useQueryClient();
   const [month, setMonth] = useState(currentMonth);
 
   const cards = useQuery({ queryKey: ['cards'], queryFn: resourceApi.cards });
   const card = useMemo(() => cards.data?.find((v) => v.id === id), [cards.data, id]);
+  const presets = useQuery({ queryKey: ['card-presets'], queryFn: resourceApi.cardPresets });
 
   const summary = useQuery({
     queryKey: ['cards', id, 'summary', month],
@@ -21,6 +23,29 @@ export default function CardDetailPage() {
     queryKey: ['cards', id, 'transactions', month],
     queryFn: () => resourceApi.cardTransactions(id!, month),
     enabled: Boolean(id)
+  });
+
+  const linkPreset = useMutation({
+    mutationFn: (presetId: string | null) =>
+      resourceApi.updateCard(id!, { preset_id: presetId }),
+    onSuccess: async () => {
+      await Promise.all([
+        client.invalidateQueries({ queryKey: ['cards'] }),
+        client.invalidateQueries({ queryKey: ['cards', id, 'summary', month] }),
+      ]);
+    },
+    onError: (err: Error) => window.alert(err.message),
+  });
+
+  const applyPreset = useMutation({
+    mutationFn: (presetId: string) =>
+      resourceApi.applyCardPreset(presetId),
+    onSuccess: (result) => {
+      window.alert(
+        `기존 거래 혜택 적용 완료\n적용: ${result.applied_count}건 / 스킵: ${result.skipped_count}건`
+      );
+    },
+    onError: (err: Error) => window.alert(err.message),
   });
 
   if (!id) {
@@ -54,6 +79,63 @@ export default function CardDetailPage() {
               onChange={(e) => setMonth(e.target.value)}
             />
           </label>
+        </div>
+      </section>
+
+      {/* 프리셋 연결 */}
+      <section className="rounded-2xl bg-white p-4 shadow-soft">
+        <div className="flex flex-wrap items-center justify-between gap-3">
+          <div>
+            <h2 className="text-lg font-bold">혜택 프리셋</h2>
+            {card?.preset_id ? (
+              <p className="mt-0.5 text-sm text-teal-700">
+                {presets.data?.find((p) => p.id === card.preset_id)?.card_name ?? '프리셋 연결됨'}
+              </p>
+            ) : (
+              <p className="mt-0.5 text-sm text-slate-400">연결된 프리셋이 없습니다.</p>
+            )}
+          </div>
+          {card?.preset_id && (
+            <button
+              className="rounded-lg border border-teal-300 bg-teal-50 px-3 py-1.5 text-xs font-semibold text-teal-700 hover:bg-teal-100 disabled:opacity-40"
+              disabled={applyPreset.isPending}
+              onClick={() => {
+                if (window.confirm('이 프리셋을 기존 거래에 소급 적용하시겠습니까?\n이미 적용된 건은 건너뜁니다.'))
+                  void applyPreset.mutateAsync(card.preset_id!);
+              }}
+            >
+              {applyPreset.isPending ? '적용 중...' : '기존 거래에 적용'}
+            </button>
+          )}
+        </div>
+
+        <div className="mt-3 flex flex-wrap items-center gap-2">
+          <select
+            className="rounded-lg border border-slate-300 px-3 py-2 text-sm"
+            value={card?.preset_id ?? ''}
+            onChange={(e) => {
+              const val = e.target.value;
+              void linkPreset.mutateAsync(val || null);
+            }}
+            disabled={linkPreset.isPending}
+          >
+            <option value="">프리셋 없음</option>
+            {presets.data?.map((p) => (
+              <option key={p.id} value={p.id}>
+                {p.issuer} · {p.card_name}
+                {p.monthly_requirement != null ? ` (실적 ${(p.monthly_requirement / 10000).toFixed(0)}만원)` : ''}
+              </option>
+            ))}
+          </select>
+          {linkPreset.isPending && (
+            <span className="text-xs text-slate-500">저장 중...</span>
+          )}
+          <Link
+            to="/cards/presets"
+            className="rounded-lg border border-slate-300 px-3 py-2 text-xs text-slate-600 hover:bg-slate-50"
+          >
+            프리셋 관리
+          </Link>
         </div>
       </section>
 

@@ -478,6 +478,72 @@ pub async fn delete_kream_keyword_rule(
     Ok(Json(serde_json::json!({"message": "deleted"})))
 }
 
+#[derive(Debug, Serialize)]
+pub struct ApplyKreamKeywordRulesResponse {
+    pub applied_count: u64,
+    pub rule_count: u64,
+}
+
+pub async fn apply_kream_keyword_rules(
+    State(state): State<AppState>,
+    auth: AuthUser,
+) -> Result<Json<ApplyKreamKeywordRulesResponse>, AppError> {
+    auth.require_admin()?;
+
+    let rules = sqlx::query_as::<_, (String, String)>(
+        r#"
+        SELECT keyword_normalized, kream_kind
+        FROM kream_keyword_rules
+        WHERE user_id = $1
+          AND is_active = true
+        ORDER BY created_at ASC
+        "#,
+    )
+    .bind(auth.id)
+    .fetch_all(&state.pool)
+    .await?;
+
+    let rule_count = rules.len() as u64;
+    if rule_count == 0 {
+        return Ok(Json(ApplyKreamKeywordRulesResponse { applied_count: 0, rule_count: 0 }));
+    }
+
+    // 각 규칙을 순서대로 독립 UPDATE — 이미 kream_kind가 지정된 거래는 건너뜀
+    let mut total_applied: u64 = 0;
+
+    for (keyword, kind) in &rules {
+        // kream_kind 값은 DB CHECK 제약(purchase|settlement|side_cost)으로 보장되므로 safe
+        let pattern = format!("%{}%", keyword);
+        let result = sqlx::query(
+            r#"
+            UPDATE transactions
+            SET scope = 'kream',
+                kream_kind = $3,
+                updated_at = now()
+            WHERE user_id = $1
+              AND type = 'expense'
+              AND replace(lower(
+                    coalesce(merchant_name, '') ||
+                    coalesce(description, '') ||
+                    coalesce(memo, '')
+                  ), ' ', '') LIKE $2
+              AND NOT (scope = 'kream' AND kream_kind IS NOT NULL)
+            "#,
+        )
+        .bind(auth.id)
+        .bind(&pattern)
+        .bind(kind)
+        .execute(&state.pool)
+        .await?;
+        total_applied += result.rows_affected();
+    }
+
+    Ok(Json(ApplyKreamKeywordRulesResponse {
+        applied_count: total_applied,
+        rule_count,
+    }))
+}
+
 pub async fn list_kream_ledger(
     State(state): State<AppState>,
     auth: AuthUser,

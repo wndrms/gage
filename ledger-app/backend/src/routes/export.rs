@@ -13,7 +13,7 @@ pub async fn export_transactions_csv(
     auth: AuthUser,
 ) -> Result<Response<Body>, AppError> {
     let transactions = sqlx::query_as::<_, Transaction>(
-        "SELECT * FROM transactions WHERE user_id = $1 ORDER BY transaction_at DESC",
+        "SELECT t.*, cd.card_name FROM transactions t LEFT JOIN cards cd ON t.card_id = cd.id WHERE t.user_id = $1 ORDER BY t.transaction_at DESC",
     )
     .bind(auth.id)
     .fetch_all(&state.pool)
@@ -21,11 +21,11 @@ pub async fn export_transactions_csv(
 
     let mut output = String::new();
     output.push('\u{FEFF}'); // BOM — Excel UTF-8 인식
-    output.push_str("거래일시,유형,금액,가맹점,내용,카테고리ID,계좌ID,카드ID,메모,출처\n");
+    output.push_str("거래일시,유형,금액,가맹점,내용,카테고리ID,계좌ID,카드ID,카드명,메모,출처\n");
 
     for tx in &transactions {
         let row = format!(
-            "{},{},{},{},{},{},{},{},{},{}\n",
+            "{},{},{},{},{},{},{},{},{},{},{}\n",
             // 날짜는 숫자만 포함하므로 escape 불필요
             tx.transaction_at.format("%Y-%m-%d %H:%M:%S"),
             csv_cell(&tx.r#type),
@@ -35,6 +35,7 @@ pub async fn export_transactions_csv(
             tx.category_id.map(|u| u.to_string()).unwrap_or_default(),
             tx.account_id.map(|u| u.to_string()).unwrap_or_default(),
             tx.card_id.map(|u| u.to_string()).unwrap_or_default(),
+            csv_cell(tx.card_name.as_deref().unwrap_or("")),
             csv_cell(tx.memo.as_deref().unwrap_or("")),
             csv_cell(&tx.source_type),
         );
@@ -61,7 +62,7 @@ pub async fn export_backup_json(
     // 4개 쿼리를 병렬 실행
     let (transactions, accounts, categories, cards) = tokio::try_join!(
             sqlx::query_as::<_, Transaction>(
-                "SELECT * FROM transactions WHERE user_id = $1 ORDER BY transaction_at DESC",
+                "SELECT t.*, cd.card_name FROM transactions t LEFT JOIN cards cd ON t.card_id = cd.id WHERE t.user_id = $1 ORDER BY t.transaction_at DESC",
             )
             .bind(auth.id)
             .fetch_all(&state.pool),

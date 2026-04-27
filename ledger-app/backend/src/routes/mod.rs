@@ -10,7 +10,10 @@ use crate::routes::{
         update_asset_snapshot,
     },
     auth::{change_password, login, logout, me},
-    card_presets::{create_card_preset, delete_card_preset, list_card_presets, update_card_preset},
+    card_presets::{
+        apply_preset_to_transactions, create_card_preset, delete_card_preset, list_card_presets,
+        parse_preset_text, update_card_preset,
+    },
     cards::{
         create_card, delete_card, get_card_summary, get_card_transactions, list_cards, update_card,
     },
@@ -23,8 +26,8 @@ use crate::routes::{
         upload_pasted_text_import,
     },
     kream::{
-        bulk_mark_kream_transactions, create_kream_keyword_rule, create_kream_sale,
-        delete_kream_keyword_rule, list_kream_keyword_rules, list_kream_ledger,
+        apply_kream_keyword_rules, bulk_mark_kream_transactions, create_kream_keyword_rule,
+        create_kream_sale, delete_kream_keyword_rule, list_kream_keyword_rules, list_kream_ledger,
         list_kream_match_candidates, list_kream_sales, mark_kream_transaction,
         match_kream_transaction, unmatch_kream_transaction, upload_kream_sales,
     },
@@ -84,9 +87,14 @@ pub fn api_router() -> Router<crate::AppState> {
             "/card-presets",
             get(list_card_presets).post(create_card_preset),
         )
+        .route("/card-presets/parse", post(parse_preset_text))
         .route(
             "/card-presets/{id}",
             put(update_card_preset).delete(delete_card_preset),
+        )
+        .route(
+            "/card-presets/{id}/apply",
+            post(apply_preset_to_transactions),
         )
         .route("/imports/upload", post(upload_file_import))
         .route("/imports/pasted-text", post(upload_pasted_text_import))
@@ -123,6 +131,10 @@ pub fn api_router() -> Router<crate::AppState> {
         .route(
             "/admin/kream-keyword-rules",
             get(list_kream_keyword_rules).post(create_kream_keyword_rule),
+        )
+        .route(
+            "/admin/kream-keyword-rules/apply",
+            post(apply_kream_keyword_rules),
         )
         .route(
             "/admin/kream-keyword-rules/{id}",

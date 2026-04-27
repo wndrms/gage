@@ -63,6 +63,7 @@ pub struct CardPreset {
     pub monthly_requirement: Option<i64>,
     pub rules: serde_json::Value,
     pub benefits: serde_json::Value,
+    pub parse_text: Option<String>,
     pub created_at: DateTime<Utc>,
     pub updated_at: DateTime<Utc>,
 }
@@ -80,6 +81,7 @@ pub struct Transaction {
     pub category_id: Option<Uuid>,
     pub account_id: Option<Uuid>,
     pub card_id: Option<Uuid>,
+    pub card_name: Option<String>,
     pub source_type: String,
     pub source_institution: Option<String>,
     pub source_file_id: Option<Uuid>,

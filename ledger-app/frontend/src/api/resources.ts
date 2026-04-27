@@ -49,6 +49,17 @@ export const resourceApi = {
       method: 'POST',
       body: JSON.stringify(payload)
     }),
+  updateCard: (id: string, payload: Record<string, unknown>) =>
+    api<Card>(`/api/cards/${id}`, {
+      method: 'PUT',
+      body: JSON.stringify(payload)
+    }),
+  cardPresets: () => api<Array<{
+    id: string;
+    issuer: string;
+    card_name: string;
+    monthly_requirement?: number | null;
+  }>>('/api/card-presets'),
   cardSummary: (id: string, month: string) =>
     api<CardSummary>(`/api/cards/${id}/summary?month=${month}`),
   cardTransactions: (id: string, month: string) =>
@@ -139,6 +150,32 @@ export const resourceApi = {
     api<{ message: string }>(`/api/admin/kream-keyword-rules/${id}`, {
       method: 'DELETE'
     }),
+  applyKreamKeywordRules: () =>
+    api<{ applied_count: number; rule_count: number }>('/api/admin/kream-keyword-rules/apply', {
+      method: 'POST'
+    }),
+  parseCardPreset: (text: string) =>
+    api<{
+      monthly_requirement?: number | null;
+      rules: unknown;
+      benefits: unknown;
+      benefit_groups: Array<{
+        group_name: string;
+        discount_rate: number;
+        monthly_cap?: number | null;
+        monthly_usage_limit?: number | null;
+        merchants: string[];
+        benefit_name: string;
+      }>;
+    }>('/api/card-presets/parse', {
+      method: 'POST',
+      body: JSON.stringify({ text })
+    }),
+  applyCardPreset: (presetId: string) =>
+    api<{ applied_count: number; skipped_count: number; preset_id: string }>(
+      `/api/card-presets/${presetId}/apply`,
+      { method: 'POST' }
+    ),
   uploadKreamSales: async (file: File) => {
     const form = new FormData();
     form.append('file', file);

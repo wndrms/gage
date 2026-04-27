@@ -111,13 +111,14 @@ pub async fn monthly_dashboard(
 
     let recent_transactions = sqlx::query_as::<_, Transaction>(
         r#"
-        SELECT *
-        FROM transactions
-        WHERE user_id = $1
-          AND scope = 'personal'
-          AND transaction_at >= $2
-          AND transaction_at < $3
-        ORDER BY transaction_at DESC
+        SELECT t.*, cd.card_name
+        FROM transactions t
+        LEFT JOIN cards cd ON t.card_id = cd.id
+        WHERE t.user_id = $1
+          AND t.scope = 'personal'
+          AND t.transaction_at >= $2
+          AND t.transaction_at < $3
+        ORDER BY t.transaction_at DESC
         LIMIT 15
         "#,
     )
@@ -284,7 +285,7 @@ pub async fn daily_dashboard(
     .unwrap_or(0);
 
     let transactions = sqlx::query_as::<_, Transaction>(
-        "SELECT * FROM transactions WHERE user_id = $1 AND scope = 'personal' AND transaction_at >= $2 AND transaction_at <= $3 ORDER BY transaction_at DESC",
+        "SELECT t.*, cd.card_name FROM transactions t LEFT JOIN cards cd ON t.card_id = cd.id WHERE t.user_id = $1 AND t.scope = 'personal' AND t.transaction_at >= $2 AND t.transaction_at <= $3 ORDER BY t.transaction_at DESC",
     )
     .bind(auth.id)
     .bind(start)
